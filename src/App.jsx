@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Briefcase, Home, Plus, Check, Trash2, Bell, BellOff, Clock, X, LogOut, Mail } from 'lucide-react';
 import { supabase } from './supabase.js';
+import { enablePush, getPushStatus, isPushSupported } from './push.js';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -129,7 +130,7 @@ function TodoList({ session }) {
 
   useEffect(() => {
     loadTasks();
-    if ('Notification' in window) setNotifPermission(Notification.permission);
+    getPushStatus().then(setNotifPermission);
 
     // Real-time sync across devices
     const channel = supabase
@@ -175,10 +176,18 @@ function TodoList({ session }) {
   };
 
   const requestNotifPermission = async () => {
-    if (!('Notification' in window)) return;
-    const result = await Notification.requestPermission();
-    setNotifPermission(result);
-    if (result === 'granted') new Notification('Notifications enabled', { body: "You'll get reminders when tasks are due." });
+    if (!isPushSupported()) {
+      showToast('Not supported', 'This browser cannot do background notifications.');
+      return;
+    }
+    try {
+      await enablePush(session.user.id);
+      setNotifPermission('granted');
+      showToast('Notifications enabled', 'This device will now get reminders even when the tab is closed.');
+    } catch (e) {
+      console.error('Push enable failed:', e);
+      showToast('Could not enable', e.message || 'Something went wrong enabling notifications.');
+    }
   };
 
   const loadTasks = async () => {
